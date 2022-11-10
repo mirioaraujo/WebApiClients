@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using WebApiClients.Entities;
 using WebApiClients.Infra.Data;
-using WebApiClients.Interfaces;
 using WebApiClients.Model;
 
 namespace WebApiClients.Controllers
@@ -24,6 +23,11 @@ namespace WebApiClients.Controllers
         public async Task<ActionResult<IEnumerable<Users.Response>>> GetAllUsers()
         {
             var response = await _context.Clientes.ToListAsync();
+
+            foreach (var user in response)
+            {
+                await _context.Enderecos.FindAsync(user.Id);
+            };
 
             return Ok(response);
         }
@@ -50,22 +54,24 @@ namespace WebApiClients.Controllers
         [HttpPut("change")]
         [ProducesResponseType(201)]
         [ProducesResponseType(400)]
-        public async Task<ActionResult<Users.Response>> AddAddressToUser([FromBody] Users.Request user, CancellationToken cancellationToken)
+        public async Task<ActionResult<Users.Response>> AddAddressToUser([Required][FromQuery] int userId, [FromBody] Users.Request user)
         {
-            var exists = await _context.Clientes.FirstOrDefaultAsync(x => x.Nome.Equals(user.Nome));
+            var exists = await _context.Clientes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
             if (exists is null)
             {
                 return BadRequest("Usuario não existente!");
             }
 
-            exists.Status = user.Status;
-            exists.DataNascimento = user.DataNascimento;
-            exists.Nome = user.Nome;
-            exists.Endereco = (IEnumerable<AddressModel>)user.Endereco;
+            exists = ConvertData(user);
+            exists.Id = userId;
 
+            _context.Entry(exists).State = EntityState.Modified;
             await _context.SaveChangesAsync();
 
-            var response = await _context.Clientes.FirstOrDefaultAsync(x => x.Nome.Equals(user.Nome));
+            var response = await _context.Clientes.FindAsync(userId);
 
             return Ok(response);
         }
